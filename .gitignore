@@ -4,7 +4,7 @@
 
 *.csv
 stanford-ner-2018-10-16/
- 
+english.muc.7class.distsim.crf.ser.gz 
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
