@@ -1,6 +1,10 @@
 import re
 import operator
 
+import math
+
+import nltk
+import numpy as np
 from pattern.text import Sentence
 from pattern.text.en import parse, modality, sentiment, mood
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -43,21 +47,21 @@ def build_dictionary(questions):
     return d
 
 
-def cleaning_questions(df, column = 'question_text'):
+def cleaning_questions(df, column='question_text'):
     cleaned_questions = df[column]\
         .progress_apply(lambda x: clean_text(x))\
         .progress_apply(lambda x: correct_mispelling(x))\
         .progress_apply(lambda x: clean_numbers(x))\
         .progress_apply(lambda x: word_tokenize(x))
 
-    return [remove_stop_words(sentence) for sentence in tqdm(cleaned_questions)]
+    return cleaned_questions
 
 
 def idf_dictionary_builder(documents):
     vectorizer = TfidfVectorizer(preprocessor=lambda x: x, tokenizer=lambda x: x)
     X = vectorizer.fit_transform(documents)
     idf_d = dict(zip(vectorizer.get_feature_names(), vectorizer.idf_))
-    return vectorizer.vocabulary_, X, sorted(idf_d.items(), key=operator.itemgetter(1))[::-1]
+    return vectorizer.vocabulary_, X, idf_d
 
 
 nlp = spacy.load('en_core_web_sm')
@@ -129,13 +133,13 @@ def correct_mispelling(text):
 to_remove = ['a','to','of','and', ' ', '  ', '…']
 
 
-def remove_stop_words(x):
-    return [word for word in x if word not in to_remove]
+def remove_stop_words(x, stop_words=to_remove):
+    return [word for word in x if word not in stop_words]
 
 
-# def sentiment_textbob(text):
-#     t = TextBlob(text)
-#     return t.sentiment.polarity, t.sentiment.subjectivity
+def clean_stopwords(questions, word_list, th):
+    stop_w = get_stop_words(word_list, threshold=th)
+    return [remove_stop_words(sentence, stop_words=stop_w) for sentence in tqdm(questions)]
 
 
 def sentiment_pattern(text):
@@ -147,4 +151,26 @@ def get_modality_mood(text):
     t = parse(text, lemmata=True)
     t = Sentence(t)
     return modality(t), mood(t)
+
+
+def get_specificity(vocab_corpus_A, vocab_corpus_B):
+    total_A = sum([v for v in vocab_corpus_A.values()])
+    total_B = sum([v for v in vocab_corpus_B.values()])
+    freqA = dict((key, value/total_A) for key, value in vocab_corpus_A.items())
+    freqB = dict((key, value/total_B) for key, value in vocab_corpus_B.items())
+    return {token: (f - freqA[token]) / math.sqrt(freqA[token]) for token, f in freqB.items()}
+
+
+def specificity_average(question, specificity_dict):
+    l = [specificity_dict[term] if term in specificity_dict else 0.0 for term in question]
+    return np.mean(l) if len(l) > 0 else 0.0
+
+
+def get_stop_words(word_dict, threshold=0.0):
+    return {word: v for word, v in word_dict.items() if v < threshold}.keys()
+
+
+def POSTagger(t):
+    return [tag[1] for tag in nltk.pos_tag(t)]
+
 
